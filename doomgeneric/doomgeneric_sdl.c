@@ -2,11 +2,47 @@
 #include "doomgeneric.h"
 #include <stdio.h>
 #include <SDL.h>
+#include <SDL_image.h>
 
-SDL_Window* window;
-SDL_Renderer* renderer;
-SDL_Event event_handler;
-uint8_t scale;
+#define ORIGINAL_SCALE          0.33
+#define WINDOW_SCALE            17
+
+#define EMOJI
+#define EMOJI_FILE              "emoji_20.png"
+#define EMOJI_WIDTH             18
+#define EMOJI_HEIGHT            18
+#define EMOJI_TABLE_MAX_COL     7
+#define EMOJI_COLOR_DIV         .3
+
+static SDL_Window* window;
+static SDL_Renderer* renderer;
+static SDL_Event event_handler;
+
+#ifdef EMOJI
+typedef struct _emoji_data
+{
+    SDL_Rect rect;
+    uint8_t saturation;
+}emoji_data;
+
+typedef struct _emoji_table
+{
+    emoji_data red[EMOJI_TABLE_MAX_COL];
+    emoji_data nred[EMOJI_TABLE_MAX_COL];
+    emoji_data green[EMOJI_TABLE_MAX_COL];
+    emoji_data ngreen[EMOJI_TABLE_MAX_COL];
+    emoji_data blue[EMOJI_TABLE_MAX_COL];
+    emoji_data nblue[EMOJI_TABLE_MAX_COL];
+    emoji_data gray[EMOJI_TABLE_MAX_COL];
+
+    uint8_t r, nr, g, ng, b, nb, gr;
+}emoji_t;
+
+static emoji_t emoji_table;
+
+static SDL_Surface* emojis = NULL;
+static SDL_Surface* screen = NULL;
+#endif
 
 #define KEYQUEUE_SIZE 16
 static unsigned short s_KeyQueue[KEYQUEUE_SIZE];
@@ -15,7 +51,12 @@ static unsigned int s_KeyQueueReadIndex = 0;
 
 void DG_Destroy()
 {
+#ifdef EMOJI
+    SDL_FreeSurface(emojis);
+    SDL_FreeSurface(screen);
+#else
     SDL_DestroyRenderer(renderer);
+#endif
     SDL_DestroyWindow(window);
     SDL_Quit();
     free(DG_ScreenBuffer);
@@ -138,16 +179,239 @@ void DG_SetWindowTitle(const char* title)
     SDL_SetWindowTitle(window, title);
 }
 
+#ifdef EMOJI
+Uint32 getpixel(SDL_Surface* surface, int x, int y)
+{
+    int bpp = surface->format->BytesPerPixel;
+    /* Here p is the address to the pixel we want to retrieve */
+    Uint8* p = (Uint8*)surface->pixels + y * surface->pitch + x * bpp;
+
+    switch (bpp) {
+    case 1:
+        return *p;
+        break;
+
+    case 2:
+        return *(Uint16*)p;
+        break;
+
+    case 3:
+        if (SDL_BYTEORDER == SDL_BIG_ENDIAN)
+            return p[0] << 16 | p[1] << 8 | p[2];
+        else
+            return p[0] | p[1] << 8 | p[2] << 16;
+        break;
+
+    case 4:
+        return *(Uint32*)p;
+        break;
+
+    default:
+        return 0;       /* shouldn't happen, but avoids warnings */
+    }
+}
+
+void sort_color_table(emoji_data* table)
+{
+    for (int i = 0; i < sizeof(table); i++)
+    for (int j = i; j < sizeof(table); j++)
+    {
+        if (table[i].saturation > table[j].saturation)
+        {
+            emoji_data tmp = table[i];
+            table[i] = table[j];
+            table[j] = tmp;
+        }
+    }
+}
+
+inline int search_saturation_position(emoji_data* table, int saturation)
+{
+    for (int i = 0; i < sizeof(table); i++)
+    {
+        if (table[i].saturation == saturation)
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+inline emoji_data get_emoji_saturation(emoji_data* table, int saturation)
+{
+    for (int i = 0; i < sizeof(table); i++)
+    {
+        if (table[i].saturation > saturation)
+        {
+            return table[i];
+        }
+    }
+
+    return table[0];
+}
+
+void create_emoji_table()
+{
+    emoji_table.r = 0;
+    emoji_table.nr = 0;
+    emoji_table.g = 0;
+    emoji_table.ng = 0;
+    emoji_table.b = 0;
+    emoji_table.nb = 0;
+    emoji_table.gr = 0;
+
+    int w = emojis->w / EMOJI_WIDTH;
+    int h = emojis->h / EMOJI_HEIGHT;
+
+    for (int y = 0; y < h; y++)
+    {
+        for (int x = 0; x < w; x++)
+        {
+            emoji_data d;
+            d.rect.x = x * EMOJI_WIDTH;
+            d.rect.y = y * EMOJI_HEIGHT;
+            d.rect.w = EMOJI_WIDTH;
+            d.rect.h = EMOJI_HEIGHT;
+
+            int total = EMOJI_WIDTH * EMOJI_HEIGHT;
+
+            int r = 0, g = 0, b = 0;
+            for (int ay = y * EMOJI_HEIGHT; ay < y * EMOJI_HEIGHT + EMOJI_HEIGHT; ay++)
+                for (int ax = x * EMOJI_WIDTH; ax < x * EMOJI_WIDTH + EMOJI_WIDTH; ax++)
+                {
+                    uint32_t col = getpixel(emojis, ax, ay);
+                    int ar = 0, ag = 0, ab = 0;
+                    SDL_GetRGB(col, emojis->format, &ar, &ag, &ab);
+                    r += ar;
+                    g += ag;
+                    b += ab;
+                    if (r + g + b == 0) total--;
+                }
+
+            if (total == 0) total = 1;
+
+            r /= total;
+            g /= total;
+            b /= total;
+            r *= EMOJI_COLOR_DIV;
+            g *= EMOJI_COLOR_DIV;
+            b *= EMOJI_COLOR_DIV;
+
+            d.saturation = (r + g + b) / 3;
+
+            if (r > g && r > b)
+            {
+                if (search_saturation_position(emoji_table.red, d.saturation) == -1)
+                {
+                    emoji_table.red[emoji_table.r] = d;
+                    emoji_table.r = (emoji_table.r + 1) % EMOJI_TABLE_MAX_COL;
+                }
+            }
+            else if (g > r && g > b)
+            {
+                if (search_saturation_position(emoji_table.green, d.saturation) == -1)
+                {
+                    emoji_table.green[emoji_table.g] = d;
+                    emoji_table.g = (emoji_table.g + 1) % EMOJI_TABLE_MAX_COL;
+                }
+            }
+            else if (b > g && b > r)
+            {
+                if (search_saturation_position(emoji_table.blue, d.saturation) == -1)
+                {
+                    emoji_table.blue[emoji_table.b] = d;
+                    emoji_table.b = (emoji_table.b + 1) % EMOJI_TABLE_MAX_COL;
+                }
+            }
+            else if (r < g && r < b)
+            {
+                if (search_saturation_position(emoji_table.nred, d.saturation) == -1)
+                {
+                    emoji_table.nred[emoji_table.nr] = d;
+                    emoji_table.nr = (emoji_table.nr + 1) % EMOJI_TABLE_MAX_COL;
+                }
+            }
+            else if (g < r && g < b)
+            {
+                if (search_saturation_position(emoji_table.ngreen, d.saturation) == -1)
+                {
+                    emoji_table.ngreen[emoji_table.ng] = d;
+                    emoji_table.ng = (emoji_table.ng + 1) % EMOJI_TABLE_MAX_COL;
+                }
+            }
+            else if (b < g && b < r)
+            {
+                if (search_saturation_position(emoji_table.nblue, d.saturation) == -1)
+                {
+                    emoji_table.nblue[emoji_table.nb] = d;
+                    emoji_table.nb = (emoji_table.nb + 1) % EMOJI_TABLE_MAX_COL;
+                }
+            }
+            else
+            {
+                if (search_saturation_position(emoji_table.gray, d.saturation) == -1)
+                {
+                    emoji_table.gray[emoji_table.gr] = d;
+                    emoji_table.gr = (emoji_table.gr + 1) % EMOJI_TABLE_MAX_COL;
+                }
+            }
+        }
+
+        sort_color_table(emoji_table.red);
+        sort_color_table(emoji_table.nred);
+        sort_color_table(emoji_table.green);
+        sort_color_table(emoji_table.ngreen);
+        sort_color_table(emoji_table.blue);
+        sort_color_table(emoji_table.nblue);
+        sort_color_table(emoji_table.gray);
+    }
+}
+
+emoji_data get_emoji(uint8_t r, uint8_t g, uint8_t b)
+{
+    int saturation = ((r + g + b) / 3) * EMOJI_COLOR_DIV;
+    if (r > g && r > b)
+    {
+        return get_emoji_saturation(emoji_table.red, saturation);
+    }
+    else if (g > r && g > b)
+    {
+        return get_emoji_saturation(emoji_table.green, saturation);
+    } 
+    else if (b > g && b > r)
+    {
+        return get_emoji_saturation(emoji_table.blue, saturation);
+    }
+    else if (r < g && r < b)
+    {
+        return get_emoji_saturation(emoji_table.nred, saturation);
+    }
+    else if (g < r && g < b)
+    {
+        return get_emoji_saturation(emoji_table.ngreen, saturation);
+    }
+    else if (b < g && b < r)
+    {
+        return get_emoji_saturation(emoji_table.nblue, saturation);
+    }
+
+    return get_emoji_saturation(emoji_table.gray, saturation);
+}
+#endif
+
 void DG_Init()
 {
-    scale = 1;
     window = SDL_CreateWindow(
         "Doomoji",
         SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,
-        DOOMGENERIC_RESX * scale,
-        DOOMGENERIC_RESY * scale,
+        DOOMGENERIC_RESX * ORIGINAL_SCALE * WINDOW_SCALE,
+        DOOMGENERIC_RESY * ORIGINAL_SCALE * WINDOW_SCALE,
         SDL_WINDOW_SHOWN);
+
+    int a = DOOMGENERIC_RESX * ORIGINAL_SCALE * WINDOW_SCALE;
+    int b = DOOMGENERIC_RESY * ORIGINAL_SCALE * WINDOW_SCALE;
 
     if (window == NULL)
     {
@@ -155,7 +419,16 @@ void DG_Init()
         exit(-1);
     }
 
+#ifdef EMOJI
+    IMG_Init(IMG_INIT_PNG);
+
+    screen = SDL_GetWindowSurface(window);
+    emojis = IMG_Load(EMOJI_FILE);
+
+    create_emoji_table();
+#else
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+#endif
 
     memset(s_KeyQueue, 0, KEYQUEUE_SIZE * sizeof(unsigned short));
 }
@@ -164,17 +437,57 @@ void DG_DrawFrame()
 {
     _event_loop();
 
-    int x, y;
-    for (y = 0; y < DOOMGENERIC_RESY; y++)
-    {
-        for (x = 0; x < DOOMGENERIC_RESX; x++)
-        {
-            int col = DG_ScreenBuffer[y * DOOMGENERIC_RESX + x];
+    int h = DOOMGENERIC_RESY * ORIGINAL_SCALE;
+    int w = DOOMGENERIC_RESX * ORIGINAL_SCALE;
 
-            SDL_SetRenderDrawColor(renderer, col >> 16, col >> 8, col, 0xff);
+    int hm = DOOMGENERIC_RESY / h;
+    int wm = DOOMGENERIC_RESX / w;
+    int total = hm * wm;
+
+    int x, y;
+    for (y = 0; y < h; y++)
+    {
+        for (x = 0; x < w; x++)
+        {
+            int r = 0, g = 0, b = 0;
+            for (int ay = 0; ay < hm; ay++)
+            for (int ax = 0; ax < wm; ax++)
+            {
+                int col = DG_ScreenBuffer[((y * hm) + ay) * DOOMGENERIC_RESX + ((x * wm) + ax)];
+                r += (uint8_t)(col >> 16);
+                g += (uint8_t)(col >> 8);
+                b += (uint8_t)col;
+            }
+
+            r /= total;
+            g /= total;
+            b /= total;
+                
+
+#ifdef EMOJI
+            SDL_Rect rect;
+            rect.x = x* EMOJI_WIDTH;
+            rect.y = y* EMOJI_HEIGHT;
+
+            SDL_Rect ra;
+            ra.x = 0 * EMOJI_WIDTH;
+            ra.y = 0 * EMOJI_HEIGHT;
+            ra.w = EMOJI_WIDTH;
+            ra.h = EMOJI_HEIGHT;
+
+            emoji_data emoji = get_emoji(r, g, b);
+            SDL_BlitSurface(emojis, &emoji.rect, screen, &rect);
+
+#else
+            SDL_SetRenderDrawColor(renderer, r, g, b, 0xff);
             SDL_RenderDrawPoint(renderer, x, y);
+#endif
         }
     }
 
+#ifdef EMOJI
+    SDL_UpdateWindowSurface(window);
+#else
     SDL_RenderPresent(renderer);
+#endif
 }
