@@ -16,9 +16,7 @@
 //	All the clipping: columns, horizontal spans, sky columns.
 //
 
-
-
-
+#pragma warning( disable : 4146 )
 
 
 #include <stdio.h>

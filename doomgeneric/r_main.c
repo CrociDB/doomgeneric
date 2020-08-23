@@ -18,7 +18,7 @@
 //	See tables.c, too.
 //
 
-
+#pragma warning( disable : 4146 )
 
 
 

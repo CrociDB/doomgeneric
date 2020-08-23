@@ -16,7 +16,7 @@
 //	BSP traversal, handling of LineSegs for rendering.
 //
 
-
+#pragma warning( disable : 4146 )
 
 
 #include "doomdef.h"

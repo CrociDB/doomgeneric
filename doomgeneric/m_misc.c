@@ -55,7 +55,7 @@
 void M_MakeDirectory(char *path)
 {
 #ifdef _WIN32
-    mkdir(path);
+    _mkdir(path);
 #else
     mkdir(path, 0755);
 #endif
@@ -293,7 +293,7 @@ char *M_StringDuplicate(const char *orig)
 {
     char *result;
 
-    result = strdup(orig);
+    result = _strdup(orig);
 
     if (result == NULL)
     {

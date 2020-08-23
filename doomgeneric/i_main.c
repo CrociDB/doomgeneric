@@ -18,6 +18,8 @@
 
 //#include "config.h"
 
+#pragma warning( disable : 4146 )
+
 #include <stdio.h>
 
 //#include "doomtype.h"
