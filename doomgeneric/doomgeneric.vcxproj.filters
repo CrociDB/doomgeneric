@@ -258,13 +258,13 @@
     <ClCompile Include="doomgeneric.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="doomgeneric_win.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="i_input.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="i_video.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="doomgeneric_sdl.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
