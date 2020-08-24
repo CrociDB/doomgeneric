@@ -1,7 +1,9 @@
-# doomoji
+# DOOMoji
 
 doom rendered with emojis. 
 
-![](screenshots/doomoji.gif)
+![DOOMoji](screenshots/doomoji.png)
 
-based on *doomgeneric*.
+runs in SDL, so in theory can be built for any platform.
+
+![DOOMoji](screenshots/doomoji.gif)
