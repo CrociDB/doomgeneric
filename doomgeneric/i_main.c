@@ -20,6 +20,12 @@
 
 #pragma warning( disable : 4146 )
 
+#ifdef WINDOWS
+#define MAIN WinMain
+#else
+#define MAIN main
+#endif
+
 #include <stdio.h>
 
 //#include "doomtype.h"
@@ -39,12 +45,16 @@ void M_FindResponseFile(void);
 void dg_Create();
 
 
-int WinMain(int argc, char **argv)
+int MAIN(int argc, char **argv)
 {
     // save arguments
-
+#ifdef WINDOWS
     myargc = 0;
     myargv = "";
+#else
+    myargc = argc;
+    myargv = argv;
+#endif
 
     M_FindResponseFile();
 
