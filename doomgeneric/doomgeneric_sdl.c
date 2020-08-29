@@ -4,8 +4,9 @@
 #include <SDL.h>
 #include <SDL_image.h>
 
-#define ORIGINAL_SCALE          0.33
+#define ORIGINAL_SCALE          0.333
 
+#define EMOJI
 #define EMOJI
 #define EMOJI_FILE              "emoji_all.png"
 #define EMOJI_WIDTH             18
@@ -407,8 +408,8 @@ emoji_data get_emoji(uint8_t r, uint8_t g, uint8_t b)
 
 void DG_Init()
 {
-    int a = DOOMGENERIC_RESX * ORIGINAL_SCALE * (EMOJI_WIDTH);
-    int b = DOOMGENERIC_RESY * ORIGINAL_SCALE * EMOJI_HEIGHT;
+    int a = DOOMGENERIC_RESX * ORIGINAL_SCALE * EMOJI_WIDTH - 10;
+    int b = DOOMGENERIC_RESY * ORIGINAL_SCALE * EMOJI_HEIGHT - 10;
 
     window = SDL_CreateWindow(
         "Doomoji",

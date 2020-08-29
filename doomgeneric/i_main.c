@@ -39,12 +39,12 @@ void M_FindResponseFile(void);
 void dg_Create();
 
 
-int main(int argc, char **argv)
+int WinMain(int argc, char **argv)
 {
     // save arguments
 
-    myargc = argc;
-    myargv = argv;
+    myargc = 0;
+    myargv = "";
 
     M_FindResponseFile();
 
